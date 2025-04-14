@@ -1,0 +1,151 @@
+---
+title: "Étude de l'impact de l'exposition moyenne aux particules fines PM2.5 sur l'espérance de vie à la naissance."
+author: "Aymane Aibichi, Nawel Arif, Ali Bouguerra, Zineb Manar "
+output: 
+  html_document: 
+    theme: simplex
+    toc: yes
+    toc_float: yes
+---
+
+```{r echo=FALSE,include= FALSE}
+
+library(readxl)
+library(dplyr)
+library(stargazer)
+library(lmtest)
+library(sandwich)
+library(whitestrap)
+library(corrplot)
+library(ggplot2)
+library(plotly)
+data = read_excel("C:/Users/hassan/Desktop/econometrie/M1 Econometrie/combined_data.xlsx")
+```
+
+## Introduction
+
+### Contexte du sujet 
+
+De nos jours, On observe de plus en plus de politiques publiques visant à réduire le nombre de véhicules diesel, en raison des émissions de particules fines PM2.5, qui sont très nocives pour le système respiratoire. Nous allons essayer, à l'aide d'un modèle de régression linéaire, d'évaluer l'impact de l'exposition moyenne aux particules fines PM2.5 sur l'espérance de vie.
+
+### Bases de données.
+
+Les 4 bases de données proviennent du site de la Banque mondiale : https://data.worldbank.org/.
+Le travail sur les bases de données a été réalisé sur Excel afin de conserver les données de 2018, d’éliminer les données manquantes et de retirer les regroupements de pays (comme l’Europe de l’Ouest)
+
+```{r}
+#espevie <- read_excel("C:/Users/zineb/OneDrive/Bureau/Documents MonMaster/Master Data/espevie.xls")
+#parturb <- read_excel("C:/Users/zineb/OneDrive/Bureau/Documents MonMaster/Master Data/parturb.xls")
+#pm25 <- read_excel("C:/Users/zineb/OneDrive/Bureau/Documents MonMaster/Master Data/pm25.xls")
+#pib <- read_excel("C:/Users/zineb/OneDrive/Bureau/Documents MonMaster/Master Data/pib.xls")
+
+
+#data <- espevie %>%
+  #inner_join(parturb, by = "Country Name") %>%
+  #inner_join(pm25, by = "Country Name") %>%
+  #inner_join(pib, by = "Country Name") 
+
+
+#write.xlsx(data, "C:/Users/zineb/OneDrive/Bureau/Documents MonMaster/Master Data/combined_data.xlsx")
+
+```
+
+Ci-dessus, nous présentons les étapes effectuées sur R pour fusionner les bases de données et créer une base unique contenant 186 pays différents.
+
+
+## Statistiques descriptives.
+
+
+```{r,echo=T}
+stargazer(as.data.frame(data), 
+          type = "text",
+          title = "Table: Descriptive statistics of some variables",
+          covariate.labels = c("Esperance de vie", "Part urbanistation","Exposition moyenne pm2,5", "pib"))
+
+
+```
+
+Les statistiques descriptives présentées concernent quatre variables : l'espérance de vie à la naissance, le pourcentage de la population totale vivant en milieu urbain, l'exposition moyenne aux particules fines PM2.5 et le PIB, sur un échantillon de 186 observations. L'espérance de vie moyenne est de 72,2 ans, avec des valeurs comprises entre 52,6 ans et 84,2 ans.
+
+
+```{r}
+corrplot(cor(data[-1]), method = 'square',  diag = F, addCoef.col ='black', number.cex = 0.7)
+```
+
+Ce graphique illustre les corrélations entre les différentes variables. On observe une corrélation négative de -0,41 entre l'exposition moyenne aux particules fines PM2.5 et l'espérance de vie à la naissance.
+
+
+## Visualisation des données.
+
+```{r,warning=FALSE}
+
+plot_ly (data= data,
+  x = data$pm25, y = data$espevie,
+  type = "scatter",
+  mode = "markers",
+  text = ~`Country Name`
+  )
+```
+**Ce graphique présente l'espérance de vie à la naissance en fonction de l'exposition moyenne aux particules fines PM2.5**
+
+
+## Modele de regressions lineaire simple.
+
+
+### Résultats du modèle.
+
+Nous commençons par examiner un modèle de régression linéaire simple en prenant le logarithme de l'espérance de vie et de la concentration de PM2.5.
+```{r}
+modlogl <- lm(log(espevie)~log(pm25), data = data)
+summary(modlogl)
+
+```
+
+Dans ce modèle simple de référence, nous observons qu'une hausse de **1 % de l'exposition moyenne aux particules fines PM2.5 entraîne une diminution de 0,07848 % de l'espérance de vie à la naissance**. De plus, le coefficient est significatif. Cependant, ce modèle est incomplet et nécessite l'ajout de variables de contrôle.
+
+
+
+### Visualisation du modèle.
+
+```{r}
+ggplot(data) +
+  aes(x = log(pm25), y = log(espevie)) +
+  geom_point(size = 2L, colour = "#B22222") +
+  theme_minimal()+
+  geom_smooth(method = "lm", se = FALSE, linewidth = 1)
+```
+
+Voici un graphique illustrant les données ainsi que la droite de régression associée au modèle simple.
+
+## Modele de regressions lineaire multiple.
+
+### Résultats du modèle.
+
+
+```{r}
+modlogl6 <- lm(log(espevie)~log(pm25)+ parturb + log(pib), data = data)
+summary(modlogl6)
+```
+
+
+Nous présentons ici un tableau détaillant la régression linéaire multiple, intégrant comme variables de contrôle le PIB en valeur absolue et la part de la population totale vivant en milieu urbain. Dans ce modèle, **une hausse de 1 % de l'exposition moyenne aux particules fines PM2.5 entraîne une diminution de 0,0553 % de l'espérance de vie, à PIB constant et pourcentage de population urbaine constant**. Le coefficient est significatif, car la p-value est largement inférieure à 5 %. De plus, les variables sont conjointement significativement différentes de 0, comme l'indique une p-value globale également inférieure à 5 %.
+
+
+### Vérification héteroscedasticité et autocorrélation.
+
+```{r}
+bptest(modlogl6)
+dwtest(modlogl6)
+```
+
+Dans le test de Breusch-Pagan, la p-value est largement inférieure à 5 %, ce qui nous conduit à rejeter l'hypothèse nulle d'homoscédasticité. Nous concluons donc à la présence d'hétéroscédasticité et discuterons des solutions pour résoudre ce problème.
+
+Par ailleurs, le test de Durbin-Watson permet de détecter la présence d'autocorrélation. La p-value étant largement supérieure au seuil de 5 %, nous concluons à l'absence d'autocorrélation.
+
+### Corréction de l'heteroscédasticité.
+
+```{r}
+coeftest(modlogl6,vcov=vcovHC(modlogl6,type="HC0"))
+```
+
+Pour corriger l'hétéroscédasticité, nous utilisons les écarts-types de White. Nous observons que la p-value du t-test associé à la variable est largement inférieure à 5 %, ce qui indique que le coefficient est significativement différent de 0.
